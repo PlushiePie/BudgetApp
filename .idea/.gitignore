@@ -1,0 +1,31 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+
+# Gradle files
+.gradle/
+build/
+*/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio
+*.iml
+.idea/
+.DS_Store
+*.hprof
+.cxx/
+local.properties
+captures/
+.externalNativeBuild/
+
+# Kotlin
+.kotlin/
+
+# Generated files
+bin/
+gen/
+out/
+app/build/
+
+# Logs
+*.log
