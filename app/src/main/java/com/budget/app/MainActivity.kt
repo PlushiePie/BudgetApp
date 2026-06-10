@@ -1,6 +1,7 @@
 package com.budget.app
 
 import android.app.DatePickerDialog
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -27,7 +28,6 @@ import java.util.*
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var budgetManager: BudgetManager
-    private lateinit var categoryAdapter: CategoryAdapter
     private lateinit var transactionAdapter: TransactionAdapter
 
     private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
@@ -47,15 +47,19 @@ class MainActivity : AppCompatActivity() {
             budgetManager.loadInitialData()
             loadData()
         }
+
+        // Проверяем, нужно ли показать все траты
+        if (intent.getBooleanExtra("show_all_transactions", false)) {
+            showAllTransactionsDialog()
+        }
+
+        // Проверяем, нужно ли экспортировать CSV
+        if (intent.getBooleanExtra("export_csv", false)) {
+            exportToCSV()
+        }
     }
 
     private fun setupRecyclerViews() {
-        categoryAdapter = CategoryAdapter { category ->
-            showEditBudgetDialog(category)
-        }
-        binding.rvCategories.layoutManager = LinearLayoutManager(this)
-        binding.rvCategories.adapter = categoryAdapter
-
         transactionAdapter = TransactionAdapter(
             onDeleteClick = { transaction ->
                 lifecycleScope.launch {
@@ -70,6 +74,9 @@ class MainActivity : AppCompatActivity() {
                     loadData()
                     Toast.makeText(this@MainActivity, "Трата отмечена как выполненная", Toast.LENGTH_SHORT).show()
                 }
+            },
+            onItemClick = { transaction ->
+                showTransactionDetailsDialog(transaction)
             }
         )
         binding.rvRecentTransactions.layoutManager = LinearLayoutManager(this)
@@ -81,24 +88,22 @@ class MainActivity : AppCompatActivity() {
             showAddTransactionDialog()
         }
 
-        binding.btnViewAllTransactions.setOnClickListener {
-            showAllTransactionsDialog()
-        }
-
         binding.btnSavings.setOnClickListener {
             showSavingsDialog()
         }
 
         binding.btnAnalytics.setOnClickListener {
-            showAnalyticsDialog()
-        }
-
-        binding.btnExport.setOnClickListener {
-            exportToCSV()
+            val intent = Intent(this, MonthlyAnalyticsActivity::class.java)
+            startActivity(intent)
         }
 
         binding.btnSetMonthlyBudget.setOnClickListener {
             showSetMonthlyBudgetDialog()
+        }
+
+        binding.btnCategories.setOnClickListener {
+            val intent = Intent(this, CategoriesActivity::class.java)
+            startActivity(intent)
         }
     }
 
@@ -106,7 +111,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             budgetManager.getAllCategories().collect { categories ->
                 currentCategories = categories
-                updateCategoriesUI(categories)
+                updatePieChart(categories)
                 updateTotalUI()
             }
         }
@@ -118,80 +123,109 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateCategoriesUI(categories: List<Category>) {
-        categoryAdapter.submitList(categories)
-        updatePieChart(categories)
-    }
-
     private fun updatePieChart(categories: List<Category>) {
-        val entries = mutableListOf<PieEntry>()
-        val colors = mutableListOf<Int>()
+        lifecycleScope.launch {
+            val allTransactions = budgetManager.getAllTransactions().firstOrNull() ?: emptyList()
 
-        // Цвета для разных категорий
-        val colorPalette = listOf(
-            android.graphics.Color.parseColor("#FF6B6B"), // Красный
-            android.graphics.Color.parseColor("#4ECDC4"), // Бирюзовый
-            android.graphics.Color.parseColor("#45B7D1"), // Голубой
-            android.graphics.Color.parseColor("#96CEB4"), // Салатовый
-            android.graphics.Color.parseColor("#FFEAA7"), // Желтый
-            android.graphics.Color.parseColor("#DDA0DD"), // Сливовый
-            android.graphics.Color.parseColor("#FFB347"), // Оранжевый
-            android.graphics.Color.parseColor("#779ECB")  // Синий
-        )
+            val calendar = Calendar.getInstance()
+            val currentMonth = calendar.get(Calendar.MONTH)
+            val currentYear = calendar.get(Calendar.YEAR)
 
-        for ((index, category) in categories.withIndex()) {
-            if (category.spent > 0) {
-                entries.add(PieEntry(category.spent.toFloat(), "${category.icon} ${category.name}"))
-                val colorIndex = index % colorPalette.size
-                colors.add(colorPalette[colorIndex])
+            // Фильтруем траты только за текущий месяц
+            val currentMonthTransactions = allTransactions.filter { transaction ->
+                val transCalendar = Calendar.getInstance()
+                transCalendar.time = transaction.date
+                transCalendar.get(Calendar.MONTH) == currentMonth &&
+                        transCalendar.get(Calendar.YEAR) == currentYear
             }
-        }
 
-        if (entries.isNotEmpty()) {
-            val dataSet = PieDataSet(entries, "Траты по категориям")
-            dataSet.colors = colors
-            dataSet.valueTextSize = 16f
-            dataSet.valueTypeface = null
-            dataSet.setDrawIcons(false)
-            dataSet.valueTextColor = android.graphics.Color.WHITE
+            // Сумма трат за текущий месяц
+            val totalCurrentMonth = currentMonthTransactions.sumOf { it.amount }
 
-            val pieData = PieData(dataSet)
-            pieData.setValueFormatter(PercentFormatter())
-            pieData.setValueTextSize(16f)
+            // Группируем по категориям
+            val categorySpent = mutableMapOf<String, Double>()
+            for (transaction in currentMonthTransactions) {
+                categorySpent[transaction.category] = categorySpent.getOrDefault(transaction.category, 0.0) + transaction.amount
+            }
 
-            binding.pieChart.data = pieData
-            binding.pieChart.description.isEnabled = false
-            binding.pieChart.isDrawHoleEnabled = true
-            binding.pieChart.setHoleColor(android.graphics.Color.TRANSPARENT)
-            binding.pieChart.setDrawEntryLabels(true)
-            binding.pieChart.setEntryLabelTextSize(16f)  // Увеличен размер названий категорий
-            binding.pieChart.setEntryLabelColor(android.graphics.Color.BLACK)
-            binding.pieChart.setCenterTextSize(18f)
-            binding.pieChart.animateY(1000)
-            binding.pieChart.invalidate()
-        } else {
-            binding.pieChart.clear()
-            binding.pieChart.setNoDataText("Нет данных о тратах")
-            binding.pieChart.invalidate()
+            val entries = mutableListOf<PieEntry>()
+            val colors = mutableListOf<Int>()
+
+            val colorPalette = listOf(
+                android.graphics.Color.parseColor("#FF6B6B"),
+                android.graphics.Color.parseColor("#4ECDC4"),
+                android.graphics.Color.parseColor("#45B7D1"),
+                android.graphics.Color.parseColor("#96CEB4"),
+                android.graphics.Color.parseColor("#FFEAA7"),
+                android.graphics.Color.parseColor("#DDA0DD"),
+                android.graphics.Color.parseColor("#FFB347"),
+                android.graphics.Color.parseColor("#779ECB")
+            )
+
+            var index = 0
+            for ((categoryName, amount) in categorySpent) {
+                if (amount > 0) {
+                    val category = categories.find { it.name == categoryName }
+                    val icon = category?.icon ?: "📌"
+                    entries.add(PieEntry(amount.toFloat(), "$icon $categoryName"))
+                    colors.add(colorPalette[index % colorPalette.size])
+                    index++
+                }
+            }
+
+            if (entries.isNotEmpty()) {
+                val dataSet = PieDataSet(entries, "Траты за этот месяц")
+                dataSet.colors = colors
+                dataSet.valueTextSize = 16f
+                dataSet.valueTypeface = null
+                dataSet.setDrawIcons(false)
+                dataSet.valueTextColor = android.graphics.Color.BLACK
+
+                val pieData = PieData(dataSet)
+                pieData.setValueFormatter(PercentFormatter())
+                pieData.setValueTextSize(16f)
+
+                binding.pieChart.data = pieData
+                binding.pieChart.description.isEnabled = false
+                binding.pieChart.isDrawHoleEnabled = true
+                binding.pieChart.setHoleColor(android.graphics.Color.TRANSPARENT)
+                binding.pieChart.setDrawEntryLabels(true)
+                binding.pieChart.setEntryLabelTextSize(16f)
+                binding.pieChart.setEntryLabelColor(android.graphics.Color.BLACK)
+                // Устанавливаем сумму за текущий месяц в центр диаграммы
+                binding.pieChart.setCenterText("${totalCurrentMonth.toInt()} ₽")
+                binding.pieChart.setCenterTextSize(18f)
+                binding.pieChart.animateY(1000)
+                binding.pieChart.invalidate()
+            } else {
+                binding.pieChart.clear()
+                binding.pieChart.setNoDataText("Нет трат за этот месяц")
+                binding.pieChart.invalidate()
+            }
         }
     }
 
     private suspend fun updateTotalUI() {
-        val totalBudget = budgetManager.getTotalBudget()
-        val totalSpent = budgetManager.getTotalSpent()
-        val percent = if (totalBudget > 0) ((totalSpent / totalBudget) * 100).toInt() else 0
+        val allTransactions = budgetManager.getAllTransactions().firstOrNull() ?: emptyList()
 
-        binding.tvTotalInfo.text = "Итого: ${totalSpent.toInt()} ₽ из ${totalBudget.toInt()} ₽ ($percent%)"
-        binding.progressTotal.progress = percent
-    }
+        val calendar = Calendar.getInstance()
+        val currentMonth = calendar.get(Calendar.MONTH)
+        val currentYear = calendar.get(Calendar.YEAR)
 
-    private fun getProgressColor(category: Category): Int {
-        val ratio = category.spent / category.budget
-        return when {
-            ratio >= 1.0 -> android.graphics.Color.parseColor("#FF4444")
-            ratio >= 0.8 -> android.graphics.Color.parseColor("#FFA500")
-            else -> android.graphics.Color.parseColor("#4CAF50")
+        // Фильтруем траты только за текущий месяц
+        val currentMonthTransactions = allTransactions.filter { transaction ->
+            val transCalendar = Calendar.getInstance()
+            transCalendar.time = transaction.date
+            transCalendar.get(Calendar.MONTH) == currentMonth &&
+                    transCalendar.get(Calendar.YEAR) == currentYear
         }
+
+        val totalSpentThisMonth = currentMonthTransactions.sumOf { it.amount }
+        val totalBudget = budgetManager.getTotalBudget()
+        val percent = if (totalBudget > 0) ((totalSpentThisMonth / totalBudget) * 100).toInt() else 0
+
+        binding.tvTotalInfo.text = "Итого за месяц: ${totalSpentThisMonth.toInt()} ₽ из ${totalBudget.toInt()} ₽ ($percent%)"
+        binding.progressTotal.progress = percent
     }
 
     private fun showAddTransactionDialog() {
@@ -256,29 +290,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showEditBudgetDialog(category: Category) {
-        val dialogBinding = DialogEditBudgetBinding.inflate(layoutInflater)
-        dialogBinding.etBudget.setText(category.budget.toInt().toString())
-
-        AlertDialog.Builder(this)
-            .setTitle("Редактировать бюджет: ${category.icon} ${category.name}")
-            .setView(dialogBinding.root)
-            .setPositiveButton("Сохранить") { _, _ ->
-                val newBudget = dialogBinding.etBudget.text.toString().toDoubleOrNull()
-                if (newBudget != null && newBudget > 0) {
-                    lifecycleScope.launch {
-                        budgetManager.updateBudget(category.name, newBudget)
-                        loadData()
-                        Toast.makeText(this@MainActivity, "Бюджет обновлён", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Toast.makeText(this, "Введите корректную сумму", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
     private fun showSetMonthlyBudgetDialog() {
         val input = EditText(this)
         input.hint = "Общий бюджет на месяц"
@@ -322,7 +333,7 @@ class MainActivity : AppCompatActivity() {
 
                 listView.setOnItemClickListener { _, _, position, _ ->
                     val transaction = transactions[position]
-                    showTransactionActionsDialog(transaction)
+                    showTransactionDetailsDialog(transaction)
                     dialog.dismiss()
                 }
 
@@ -332,33 +343,109 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showTransactionActionsDialog(transaction: Transaction) {
-        val options = mutableListOf<String>()
-        if (!transaction.isCompleted) options.add("Отметить как выполненную")
-        options.add("Удалить")
-        options.add("Отмена")
+    private fun showTransactionDetailsDialog(transaction: Transaction) {
+        val status = if (transaction.isCompleted) "✅ Выполнена" else "⏳ Ожидает"
+        val message = """
+            
+            ═══════════════════════════
+            
+            📁 Категория: ${transaction.category}
+            💰 Сумма: ${transaction.amount.toInt()} ₽
+            📅 Дата: ${dateFormat.format(transaction.date)}
+            📝 Комментарий: ${transaction.comment.ifEmpty { "—" }}
+            🏷 Статус: $status
+            
+            ═══════════════════════════
+            
+        """.trimIndent()
 
-        AlertDialog.Builder(this)
-            .setTitle("Действия с тратой")
-            .setItems(options.toTypedArray()) { _, which ->
-                when (options[which]) {
-                    "Отметить как выполненную" -> {
-                        lifecycleScope.launch {
-                            budgetManager.markTransactionCompleted(transaction)
-                            loadData()
-                            Toast.makeText(this@MainActivity, "Отмечено как выполненное", Toast.LENGTH_SHORT).show()
-                        }
+        // Создаем диалог
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("📋 ДЕТАЛИ ТРАТЫ")
+            .setMessage(message)
+            .create()
+
+        // Создаем кастомный layout для кнопок после создания диалога
+        val buttonLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(50, 10, 50, 20)
+        }
+
+        // Кнопка "Удалить"
+        val deleteButton = Button(this).apply {
+            text = "❌ Удалить"
+            textSize = 16f
+            setBackgroundColor(android.graphics.Color.parseColor("#E53935"))
+            setTextColor(android.graphics.Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 5, 0, 5) }
+            setOnClickListener {
+                lifecycleScope.launch {
+                    budgetManager.deleteTransaction(transaction)
+                    loadData()
+                    Toast.makeText(this@MainActivity, "Трата удалена", Toast.LENGTH_SHORT).show()
+                }
+                dialog.dismiss()
+            }
+        }
+
+        // Кнопка "Отметить выполненной"
+        val completeButton = Button(this).apply {
+            text = if (transaction.isCompleted) "✅ Уже выполнена" else "✅ Отметить выполненной"
+            textSize = 16f
+            setBackgroundColor(android.graphics.Color.parseColor("#4CAF50"))
+            setTextColor(android.graphics.Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 5, 0, 5) }
+            isEnabled = !transaction.isCompleted
+            if (!transaction.isCompleted) {
+                setOnClickListener {
+                    lifecycleScope.launch {
+                        budgetManager.markTransactionCompleted(transaction)
+                        loadData()
+                        Toast.makeText(this@MainActivity, "Трата отмечена как выполненная", Toast.LENGTH_SHORT).show()
                     }
-                    "Удалить" -> {
-                        lifecycleScope.launch {
-                            budgetManager.deleteTransaction(transaction)
-                            loadData()
-                            Toast.makeText(this@MainActivity, "Трата удалена", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                    dialog.dismiss()
                 }
             }
-            .show()
+        }
+
+        // Кнопка "Закрыть"
+        val closeButton = Button(this).apply {
+            text = "🔙 Закрыть"
+            textSize = 16f
+            setBackgroundColor(android.graphics.Color.parseColor("#607D8B"))
+            setTextColor(android.graphics.Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 5, 0, 5) }
+            setOnClickListener {
+                dialog.dismiss()
+            }
+        }
+
+        buttonLayout.addView(deleteButton)
+        buttonLayout.addView(completeButton)
+        buttonLayout.addView(closeButton)
+
+        // Добавляем кнопки в диалог
+        dialog.setView(buttonLayout)
+
+        dialog.show()
+
+        // Увеличиваем размер текста сообщения
+        val messageView = dialog.findViewById<TextView>(android.R.id.message)
+        messageView?.textSize = 18f
+        messageView?.gravity = android.view.Gravity.CENTER
     }
 
     private fun showSavingsDialog() {
@@ -368,7 +455,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (savings.isEmpty()) {
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("💰 Сбережения")
+                        .setTitle("💰 Цели")
                         .setMessage("Нет добавленных целей\n\nНажмите 'Добавить цель' чтобы создать")
                         .setPositiveButton("➕ Добавить цель") { _, _ ->
                             showAddSavingDialog()
@@ -384,7 +471,7 @@ class MainActivity : AppCompatActivity() {
                     }.toTypedArray()
 
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("💰 Сбережения")
+                        .setTitle("💰 Цели")
                         .setItems(items) { _, which ->
                             val saving = savings[which]
                             showSavingActionsDialog(saving)
@@ -410,7 +497,7 @@ class MainActivity : AppCompatActivity() {
         val dialogBinding = DialogAddSavingBinding.inflate(layoutInflater)
 
         AlertDialog.Builder(this)
-            .setTitle("Добавить цель сбережения")
+            .setTitle("Добавить цель")
             .setView(dialogBinding.root)
             .setPositiveButton("Сохранить") { _, _ ->
                 val name = dialogBinding.etName.text.toString().trim()
@@ -487,81 +574,18 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showAnalyticsDialog() {
-        lifecycleScope.launch {
-            // Принудительно обновляет данные
-            budgetManager.refreshData()
-
-            val totalSpent = budgetManager.getTotalSpent()
-            val totalBudget = budgetManager.getTotalBudget()
-            val transactions = budgetManager.getAllTransactions().firstOrNull() ?: emptyList()
-
-            // Траты за текущий месяц
-            val calendar = Calendar.getInstance()
-            val currentMonth = calendar.get(Calendar.MONTH)
-            val currentYear = calendar.get(Calendar.YEAR)
-
-            val thisMonthTransactions = transactions.filter { transaction ->
-                val transCalendar = Calendar.getInstance()
-                transCalendar.time = transaction.date
-                transCalendar.get(Calendar.MONTH) == currentMonth &&
-                        transCalendar.get(Calendar.YEAR) == currentYear
+    private fun exportToCSV() {
+        AlertDialog.Builder(this)
+            .setTitle("📄 Экспорт данных")
+            .setMessage("Вы действительно хотите экспортировать все траты в CSV файл?")
+            .setPositiveButton("Да, экспортировать") { _, _ ->
+                performExport()
             }
-
-            val spentThisMonth = thisMonthTransactions.sumOf { it.amount }
-            val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-            val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
-
-            // Средние траты
-            val avgPerDayThisMonth = if (currentDay > 0) spentThisMonth / currentDay else 0.0
-            val daysLeft = daysInMonth - currentDay
-            val projectedByEnd = spentThisMonth + (avgPerDayThisMonth * daysLeft)
-            val forecast = totalBudget - projectedByEnd
-
-            val mostExpensive = budgetManager.getMostExpensiveCategory()
-
-            val percentageText = if (mostExpensive != null) {
-                val percentage = budgetManager.getCategoryPercentage(mostExpensive.first)
-                String.format("%.1f", percentage)
-            } else "0"
-
-            val forecastText = when {
-                forecast > 0 -> "✅ Остаток: ${forecast.toInt()} ₽"
-                forecast < 0 -> "⚠️ Превышение: ${(-forecast).toInt()} ₽"
-                else -> "➖ В ноль"
-            }
-
-            val message = buildString {
-                appendLine("📊 СТАТИСТИКА ТРАТ")
-                appendLine("━━━━━━━━━━━━━━━━━━━")
-                appendLine("💰 Всего потрачено: ${totalSpent.toInt()} ₽")
-                appendLine("📋 Общий бюджет: ${totalBudget.toInt()} ₽")
-                appendLine("")
-                appendLine("📅 ТРАТЫ ЗА ЭТОТ МЕСЯЦ")
-                appendLine("Потрачено: ${spentThisMonth.toInt()} ₽")
-                appendLine("Остаток бюджета: ${(totalBudget - spentThisMonth).toInt()} ₽")
-                appendLine("Дней прошло: $currentDay из $daysInMonth")
-                appendLine("В день в среднем: ${String.format("%.2f", avgPerDayThisMonth)} ₽")
-                appendLine("")
-                if (mostExpensive != null && mostExpensive.second > 0) {
-                    appendLine("🔥 САМАЯ ЗАТРАТНАЯ КАТЕГОРИЯ")
-                    appendLine("${mostExpensive.first}: ${mostExpensive.second.toInt()} ₽")
-                    appendLine("Доля: $percentageText%")
-                    appendLine("")
-                }
-                appendLine("🎯 ПРОГНОЗ НА КОНЕЦ МЕСЯЦА")
-                appendLine(forecastText)
-            }
-
-            AlertDialog.Builder(this@MainActivity)
-                .setTitle("Аналитика")
-                .setMessage(message)
-                .setPositiveButton("Закрыть", null)
-                .show()
-        }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
-    private fun exportToCSV() {
+    private fun performExport() {
         lifecycleScope.launch {
             val transactions = budgetManager.getAllTransactions().firstOrNull() ?: emptyList()
 
@@ -570,7 +594,7 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val fileName = "отчёт_${SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())}.csv"
+            val fileName = "отчёт_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.csv"
             val content = StringBuilder()
             content.append("Дата;Категория;Сумма;Комментарий;Статус\n")
 
@@ -581,58 +605,18 @@ class MainActivity : AppCompatActivity() {
             try {
                 val file = java.io.File(getExternalFilesDir(null), fileName)
                 file.writeText(content.toString())
-                Toast.makeText(this@MainActivity, "Отчёт сохранён: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, "✅ Отчёт сохранён: ${file.absolutePath}", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Ошибка сохранения: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "❌ Ошибка сохранения: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // классы адаптера
-    inner class CategoryAdapter(private val onItemClick: (Category) -> Unit) :
-        RecyclerView.Adapter<CategoryAdapter.CategoryViewHolder>() {
-
-        private var categories = listOf<Category>()
-
-        fun submitList(list: List<Category>) {
-            categories = list
-            notifyDataSetChanged()
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): CategoryViewHolder {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(android.R.layout.simple_list_item_2, parent, false)
-            return CategoryViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: CategoryViewHolder, position: Int) {
-            val category = categories[position]
-            val percent = if (category.budget > 0) ((category.spent / category.budget) * 100).toInt() else 0
-            val ratio = if (category.budget > 0) category.spent / category.budget else 0.0
-
-            holder.text1.text = "${category.icon} ${category.name}"
-            holder.text2.text = "${category.spent.toInt()} / ${category.budget.toInt()} ₽ ($percent%)"
-
-            when {
-                ratio >= 1.0 -> holder.text2.setTextColor(android.graphics.Color.parseColor("#FF4444"))
-                ratio >= 0.8 -> holder.text2.setTextColor(android.graphics.Color.parseColor("#FFA500"))
-                else -> holder.text2.setTextColor(android.graphics.Color.parseColor("#4CAF50"))
-            }
-
-            holder.itemView.setOnClickListener { onItemClick(category) }
-        }
-
-        override fun getItemCount() = categories.size
-
-        inner class CategoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            val text1 = itemView.findViewById<TextView>(android.R.id.text1)
-            val text2 = itemView.findViewById<TextView>(android.R.id.text2)
-        }
-    }
-
+    // Adapter for Transactions
     inner class TransactionAdapter(
         private val onDeleteClick: (Transaction) -> Unit,
-        private val onCompleteClick: (Transaction) -> Unit
+        private val onCompleteClick: (Transaction) -> Unit,
+        private val onItemClick: (Transaction) -> Unit
     ) : RecyclerView.Adapter<TransactionAdapter.TransactionViewHolder>() {
 
         private var transactions = listOf<Transaction>()
@@ -660,6 +644,10 @@ class MainActivity : AppCompatActivity() {
                 holder.itemView.setBackgroundColor(android.graphics.Color.parseColor("#FFF3E0"))
             } else {
                 holder.itemView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            }
+
+            holder.itemView.setOnClickListener {
+                onItemClick(transaction)
             }
 
             holder.itemView.setOnLongClickListener {

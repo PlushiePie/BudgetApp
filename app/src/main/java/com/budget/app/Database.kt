@@ -9,8 +9,8 @@ import androidx.room.TypeConverters
 import java.util.Date
 
 @Database(
-    entities = [Category::class, Transaction::class, Saving::class],
-    version = 1,
+    entities = [Category::class, Transaction::class, Saving::class, Reminder::class],
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -18,6 +18,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun transactionDao(): TransactionDao
     abstract fun savingDao(): SavingDao
+    abstract fun reminderDao(): ReminderDao
 
     companion object {
         @Volatile
@@ -29,7 +30,8 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "budget_database"
-                ).build()
+                ).fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

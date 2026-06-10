@@ -34,3 +34,14 @@ data class Saving(
     var currentAmount: Double,
     val icon: String
 )
+
+@Entity(tableName = "reminders")
+data class Reminder(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val title: String,
+    val amount: Double,
+    val category: String,
+    val dayOfMonth: Int,  // число месяца (1-31)
+    val isActive: Boolean = true
+)

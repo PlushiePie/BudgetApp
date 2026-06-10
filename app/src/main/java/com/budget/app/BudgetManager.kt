@@ -17,7 +17,6 @@ class BudgetManager(private val context: Context) {
     fun getAllSavings(): Flow<List<Saving>> = database.savingDao().getAllSavings()
 
     suspend fun refreshData() {
-        // Принудительно обновляем данные из БД
         database.categoryDao().getCategoriesList()
         database.transactionDao().getTransactionsList()
         database.savingDao().getSavingsList()
@@ -68,18 +67,33 @@ class BudgetManager(private val context: Context) {
         if (totalAmount <= 0) return
 
         val categories = database.categoryDao().getCategoriesList()
+        if (categories.isEmpty()) return
+
         val currentTotal = categories.sumOf { it.budget }
         if (currentTotal == 0.0) return
 
+        val newBudgets = mutableListOf<Pair<String, Double>>()
         var remainingBudget = totalAmount
+
         for (i in categories.indices) {
             val proportion = categories[i].budget / currentTotal
             var newBudget = totalAmount * proportion
+
+            // Округляем до 100 рублей
+            newBudget = (newBudget / 100).toInt() * 100.0
+
             if (i == categories.size - 1) {
                 newBudget = remainingBudget
             }
-            database.categoryDao().updateCategoryBudget(categories[i].name, newBudget.coerceAtLeast(0.0))
+
+            newBudgets.add(categories[i].name to newBudget)
             remainingBudget -= newBudget
+        }
+
+        for ((name, budget) in newBudgets) {
+            if (budget > 0) {
+                database.categoryDao().updateCategoryBudget(name, budget)
+            }
         }
     }
 

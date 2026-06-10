@@ -17,6 +17,9 @@ interface CategoryDao {
     @Update
     suspend fun updateCategory(category: Category)
 
+    @Delete
+    suspend fun deleteCategory(category: Category)
+
     @Query("UPDATE categories SET spent = :spent WHERE name = :name")
     suspend fun updateCategorySpent(name: String, spent: Double)
 
@@ -61,4 +64,22 @@ interface SavingDao {
 
     @Query("UPDATE savings SET currentAmount = currentAmount + :amount WHERE name = :name")
     suspend fun addToSaving(name: String, amount: Double)
+}
+
+@Dao
+interface ReminderDao {
+    @Query("SELECT * FROM reminders WHERE isActive = 1 ORDER BY dayOfMonth")
+    fun getAllReminders(): Flow<List<Reminder>>
+
+    @Query("SELECT * FROM reminders WHERE isActive = 1")
+    suspend fun getRemindersList(): List<Reminder>
+
+    @Insert
+    suspend fun insertReminder(reminder: Reminder)
+
+    @Delete
+    suspend fun deleteReminder(reminder: Reminder)
+
+    @Update
+    suspend fun updateReminder(reminder: Reminder)
 }

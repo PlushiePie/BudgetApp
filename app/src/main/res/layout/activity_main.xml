@@ -21,8 +21,7 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="?attr/actionBarSize"
-        android:paddingBottom="80dp">
+        android:layout_marginTop="?attr/actionBarSize">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -59,22 +58,20 @@
                     android:layout_height="12dp"
                     android:layout_marginTop="8dp"
                     android:progressTint="#6200EE" />
+
             </LinearLayout>
 
-            <!-- Categories Section -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Категории бюджета"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvCategories"
+            <!-- Categories Button -->
+            <Button
+                android:id="@+id/btnCategories"
+                style="@style/Widget.Material3.Button"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp" />
+                android:layout_height="56dp"
+                android:layout_marginBottom="16dp"
+                android:text="📋 КАТЕГОРИИ БЮДЖЕТА"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:backgroundTint="#3F51B5" />
 
             <View
                 android:layout_width="match_parent"
@@ -97,7 +94,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp" />
 
-            <!-- Кнопки увеличенные -->
+            <!-- Кнопки -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -112,36 +109,16 @@
                     android:layout_marginBottom="12dp">
 
                     <Button
-                        android:id="@+id/btnViewAllTransactions"
-                        style="@style/Widget.Material3.Button"
-                        android:layout_width="0dp"
-                        android:layout_height="56dp"
-                        android:layout_weight="1"
-                        android:layout_marginEnd="8dp"
-                        android:text="ВСЕ ТРАТЫ"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:backgroundTint="#2196F3" />
-
-                    <Button
                         android:id="@+id/btnSavings"
                         style="@style/Widget.Material3.Button"
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:layout_marginStart="8dp"
-                        android:text="СБЕРЕЖЕНИЯ"
+                        android:layout_marginEnd="8dp"
+                        android:text="ЦЕЛИ"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:backgroundTint="#4CAF50" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center"
-                    android:layout_marginBottom="12dp">
 
                     <Button
                         android:id="@+id/btnAnalytics"
@@ -149,23 +126,11 @@
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:layout_marginEnd="8dp"
+                        android:layout_marginStart="8dp"
                         android:text="АНАЛИТИКА"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:backgroundTint="#FF9800" />
-
-                    <Button
-                        android:id="@+id/btnExport"
-                        style="@style/Widget.Material3.Button"
-                        android:layout_width="0dp"
-                        android:layout_height="56dp"
-                        android:layout_weight="1"
-                        android:layout_marginStart="8dp"
-                        android:text="ЭКСПОРТ"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:backgroundTint="#9C27B0" />
                 </LinearLayout>
 
                 <Button
