@@ -82,8 +82,30 @@ class CategoriesActivity : AppCompatActivity() {
 
     private fun loadCategories() {
         lifecycleScope.launch {
+            // Получаем категории
             budgetManager.getAllCategories().collect { categories ->
-                categoryAdapter.submitList(categories)
+                // Получаем все траты
+                val allTransactions = budgetManager.getAllTransactions().firstOrNull() ?: emptyList()
+
+                // Фильтруем траты за текущий месяц
+                val calendar = Calendar.getInstance()
+                val currentMonth = calendar.get(Calendar.MONTH)
+                val currentYear = calendar.get(Calendar.YEAR)
+
+                val currentMonthTransactions = allTransactions.filter { transaction ->
+                    val transCalendar = Calendar.getInstance()
+                    transCalendar.time = transaction.date
+                    transCalendar.get(Calendar.MONTH) == currentMonth &&
+                            transCalendar.get(Calendar.YEAR) == currentYear
+                }
+
+                // Группируем по категориям
+                val monthlySpent = mutableMapOf<String, Double>()
+                for (transaction in currentMonthTransactions) {
+                    monthlySpent[transaction.category] = monthlySpent.getOrDefault(transaction.category, 0.0) + transaction.amount
+                }
+
+                categoryAdapter.submitList(categories, monthlySpent)
             }
         }
     }
@@ -255,16 +277,18 @@ class CategoriesActivity : AppCompatActivity() {
         }
     }
 
-    // Адаптер для списка категорий с прогресс-баром
+    // Адаптер для списка категорий с прогресс-баром только за текущий месяц
     inner class CategoryListAdapter(
         private val onEditClick: (Category) -> Unit,
         private val onDeleteClick: (Category) -> Unit
     ) : RecyclerView.Adapter<CategoryListAdapter.ViewHolder>() {
 
         private var categories = listOf<Category>()
+        private var monthlySpent = mutableMapOf<String, Double>()
 
-        fun submitList(list: List<Category>) {
+        fun submitList(list: List<Category>, spent: Map<String, Double>) {
             categories = list
+            monthlySpent = spent.toMutableMap()
             notifyDataSetChanged()
         }
 
@@ -276,12 +300,13 @@ class CategoriesActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val category = categories[position]
+            val spentThisMonth = monthlySpent[category.name] ?: 0.0
             val percent = if (category.budget > 0) {
-                ((category.spent / category.budget) * 100).toInt().coerceIn(0, 100)
+                ((spentThisMonth / category.budget) * 100).toInt().coerceIn(0, 100)
             } else 0
 
             holder.tvName.text = "${category.icon} ${category.name}"
-            holder.tvAmount.text = "${category.spent.toInt()} / ${category.budget.toInt()} ₽"
+            holder.tvAmount.text = "${spentThisMonth.toInt()} / ${category.budget.toInt()} ₽"
             holder.progressBar.progress = percent
 
             val color = when {
