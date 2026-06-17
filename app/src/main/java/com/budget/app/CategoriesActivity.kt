@@ -116,7 +116,7 @@ class CategoriesActivity : AppCompatActivity() {
         val inputBudget = EditText(this)
         inputBudget.hint = "Бюджет (₽)"
         inputBudget.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-        inputBudget.filters = arrayOf(InputFilter.LengthFilter(9))
+        inputBudget.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
 
         val inputIcon = EditText(this)
         inputIcon.hint = "Иконка (эмодзи)"
@@ -138,7 +138,7 @@ class CategoriesActivity : AppCompatActivity() {
                 val budget = inputBudget.text.toString().toDoubleOrNull()
                 val icon = inputIcon.text.toString().ifEmpty { "📌" }
 
-                if (name.isNotEmpty() && budget != null && budget > 0) {
+                if (name.isNotEmpty() && budget != null && budget > 0 && budget <= 10000000) {
                     lifecycleScope.launch {
                         try {
                             val db = AppDatabase.getDatabase(this@CategoriesActivity)
@@ -155,6 +155,8 @@ class CategoriesActivity : AppCompatActivity() {
                             Toast.makeText(this@CategoriesActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
+                } else if (budget != null && budget > 10000000) {
+                    Toast.makeText(this, "Бюджет не может превышать 10 000 000 ₽", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, "Заполните все поля корректно", Toast.LENGTH_SHORT).show()
                 }
@@ -173,7 +175,7 @@ class CategoriesActivity : AppCompatActivity() {
         inputBudget.hint = "Бюджет (₽)"
         inputBudget.setText(category.budget.toInt().toString())
         inputBudget.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-        inputBudget.filters = arrayOf(InputFilter.LengthFilter(9))
+        inputBudget.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
 
         val inputIcon = EditText(this)
         inputIcon.hint = "Иконка (эмодзи)"
@@ -195,7 +197,7 @@ class CategoriesActivity : AppCompatActivity() {
                 val newBudget = inputBudget.text.toString().toDoubleOrNull()
                 val newIcon = inputIcon.text.toString().ifEmpty { "📌" }
 
-                if (newName.isNotEmpty() && newBudget != null && newBudget > 0) {
+                if (newName.isNotEmpty() && newBudget != null && newBudget > 0 && newBudget <= 10000000) {
                     lifecycleScope.launch {
                         try {
                             val db = AppDatabase.getDatabase(this@CategoriesActivity)
@@ -226,6 +228,8 @@ class CategoriesActivity : AppCompatActivity() {
                             Toast.makeText(this@CategoriesActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
+                } else if (newBudget != null && newBudget > 10000000) {
+                    Toast.makeText(this, "Бюджет не может превышать 10 000 000 ₽", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, "Заполните все поля корректно", Toast.LENGTH_SHORT).show()
                 }
@@ -343,7 +347,7 @@ class CategoriesActivity : AppCompatActivity() {
             📌 КАК ПОЛЬЗОВАТЬСЯ:
             
             1️⃣ Добавление трат
-            Нажмите на красную кнопку ➕ внизу экрана.
+            Нажмите на синюю кнопку ➕ внизу экрана.
             Заполните: сумму, категорию, комментарий и дату.
             
             2️⃣ Категории
@@ -371,8 +375,8 @@ class CategoriesActivity : AppCompatActivity() {
             Сохраняйте все траты в CSV файл.
             
             ⚠️ ЛИМИТЫ:
-            • Максимальная сумма траты: 
-              10 000 000 ₽
+            • Максимальная сумма траты: 10 000 000 ₽
+            • Бюджет категории: 10 000 000 ₽
             • Комментарий: до 12 символов
             • Название категории: до 15 символов
             
