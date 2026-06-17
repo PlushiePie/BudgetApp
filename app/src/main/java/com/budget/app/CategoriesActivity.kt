@@ -2,6 +2,7 @@ package com.budget.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputFilter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -49,14 +50,7 @@ class CategoriesActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
-        categoryAdapter = CategoryListAdapter(
-            onEditClick = { category ->
-                showEditBudgetDialog(category)
-            },
-            onDeleteClick = { category ->
-                showDeleteCategoryDialog(category)
-            }
-        )
+        categoryAdapter = CategoryListAdapter()
         binding.rvCategoriesList.layoutManager = LinearLayoutManager(this)
         binding.rvCategoriesList.adapter = categoryAdapter
     }
@@ -77,6 +71,10 @@ class CategoriesActivity : AppCompatActivity() {
         binding.btnReminders.setOnClickListener {
             val intent = Intent(this, RemindersActivity::class.java)
             startActivity(intent)
+        }
+
+        binding.btnHelp.setOnClickListener {
+            showHelpDialog()
         }
     }
 
@@ -113,10 +111,12 @@ class CategoriesActivity : AppCompatActivity() {
     private fun showAddCategoryDialog() {
         val inputName = EditText(this)
         inputName.hint = "Название категории"
+        inputName.filters = arrayOf(InputFilter.LengthFilter(15))
 
         val inputBudget = EditText(this)
         inputBudget.hint = "Бюджет (₽)"
         inputBudget.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        inputBudget.filters = arrayOf(InputFilter.LengthFilter(9))
 
         val inputIcon = EditText(this)
         inputIcon.hint = "Иконка (эмодзи)"
@@ -163,25 +163,71 @@ class CategoriesActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showEditBudgetDialog(category: Category) {
-        val input = EditText(this)
-        input.hint = "Новый бюджет"
-        input.setText(category.budget.toInt().toString())
-        input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+    private fun showEditCategoryDialog(category: Category) {
+        val inputName = EditText(this)
+        inputName.hint = "Название категории"
+        inputName.setText(category.name)
+        inputName.filters = arrayOf(InputFilter.LengthFilter(15))
+
+        val inputBudget = EditText(this)
+        inputBudget.hint = "Бюджет (₽)"
+        inputBudget.setText(category.budget.toInt().toString())
+        inputBudget.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        inputBudget.filters = arrayOf(InputFilter.LengthFilter(9))
+
+        val inputIcon = EditText(this)
+        inputIcon.hint = "Иконка (эмодзи)"
+        inputIcon.setText(category.icon)
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(50, 20, 50, 20)
+            addView(inputName)
+            addView(inputBudget)
+            addView(inputIcon)
+        }
 
         AlertDialog.Builder(this)
-            .setTitle("Редактировать бюджет: ${category.icon} ${category.name}")
-            .setView(input)
+            .setTitle("✏️ Редактировать категорию")
+            .setView(layout)
             .setPositiveButton("Сохранить") { _, _ ->
-                val newBudget = input.text.toString().toDoubleOrNull()
-                if (newBudget != null && newBudget > 0) {
+                val newName = inputName.text.toString().trim()
+                val newBudget = inputBudget.text.toString().toDoubleOrNull()
+                val newIcon = inputIcon.text.toString().ifEmpty { "📌" }
+
+                if (newName.isNotEmpty() && newBudget != null && newBudget > 0) {
                     lifecycleScope.launch {
-                        budgetManager.updateBudget(category.name, newBudget)
-                        loadCategories()
-                        Toast.makeText(this@CategoriesActivity, "Бюджет обновлён", Toast.LENGTH_SHORT).show()
+                        try {
+                            val db = AppDatabase.getDatabase(this@CategoriesActivity)
+
+                            // Обновляем название категории (если изменилось)
+                            if (newName != category.name) {
+                                // Обновляем все траты с новым названием
+                                val transactions = db.transactionDao().getTransactionsList()
+                                for (transaction in transactions) {
+                                    if (transaction.category == category.name) {
+                                        val updatedTransaction = transaction.copy(category = newName)
+                                        db.transactionDao().updateTransaction(updatedTransaction)
+                                    }
+                                }
+                            }
+
+                            // Обновляем саму категорию
+                            val updatedCategory = category.copy(
+                                name = newName,
+                                budget = newBudget,
+                                icon = newIcon
+                            )
+                            db.categoryDao().updateCategory(updatedCategory)
+
+                            loadCategories()
+                            Toast.makeText(this@CategoriesActivity, "Категория обновлена", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(this@CategoriesActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 } else {
-                    Toast.makeText(this, "Введите корректную сумму", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Заполните все поля корректно", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Отмена", null)
@@ -210,6 +256,21 @@ class CategoriesActivity : AppCompatActivity() {
                 }
             }
             .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun showCategoryActionsDialog(category: Category) {
+        val options = arrayOf("✏️ Редактировать категорию", "🗑 Удалить категорию", "❌ Отмена")
+
+        AlertDialog.Builder(this)
+            .setTitle("${category.icon} ${category.name}")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showEditCategoryDialog(category)
+                    1 -> showDeleteCategoryDialog(category)
+                    2 -> { /* Отмена - ничего не делаем */ }
+                }
+            }
             .show()
     }
 
@@ -277,11 +338,56 @@ class CategoriesActivity : AppCompatActivity() {
         }
     }
 
-    // Адаптер для списка категорий с прогресс-баром только за текущий месяц
-    inner class CategoryListAdapter(
-        private val onEditClick: (Category) -> Unit,
-        private val onDeleteClick: (Category) -> Unit
-    ) : RecyclerView.Adapter<CategoryListAdapter.ViewHolder>() {
+    private fun showHelpDialog() {
+        val message = """
+            📌 КАК ПОЛЬЗОВАТЬСЯ:
+            
+            1️⃣ Добавление трат
+            Нажмите на красную кнопку ➕ внизу экрана.
+            Заполните: сумму, категорию, комментарий и дату.
+            
+            2️⃣ Категории
+            Создавайте свои категории (налоги, подарки и т.д.)
+            Нажмите на категорию - можно изменить бюджет.
+            Долгое нажатие - удалить категорию.
+            
+            3️⃣ Бюджет
+            На главном экране кнопка "Установить бюджет на месяц".
+            Сумма распределяется автоматически по категориям.
+            
+            4️⃣ Регулярные платежи
+            Добавьте напоминания для регулярных трат.
+            В нужный день приложение напомнит о платеже.
+            
+            5️⃣ Цели
+            Копите деньги на мечту! 
+            Создайте цель и пополняйте её.
+            
+            6️⃣ Аналитика
+            Смотрите траты по месяцам и категориям.
+            Нажимайте на сектора диаграммы для деталей.
+            
+            7️⃣ Экспорт
+            Сохраняйте все траты в CSV файл.
+            
+            ⚠️ ЛИМИТЫ:
+            • Максимальная сумма траты: 
+              10 000 000 ₽
+            • Комментарий: до 12 символов
+            • Название категории: до 15 символов
+            
+            Приятного использования! 🎉
+        """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("❓ Помощь")
+            .setMessage(message)
+            .setPositiveButton("Понятно! ✅", null)
+            .show()
+    }
+
+    // Адаптер для списка категорий с прогресс-баром (только за текущий месяц)
+    inner class CategoryListAdapter() : RecyclerView.Adapter<CategoryListAdapter.ViewHolder>() {
 
         private var categories = listOf<Category>()
         private var monthlySpent = mutableMapOf<String, Double>()
@@ -316,9 +422,11 @@ class CategoriesActivity : AppCompatActivity() {
             }
             holder.progressBar.progressTintList = android.content.res.ColorStateList.valueOf(color)
 
-            holder.itemView.setOnClickListener { onEditClick(category) }
+            holder.itemView.setOnClickListener {
+                showCategoryActionsDialog(category)
+            }
             holder.itemView.setOnLongClickListener {
-                onDeleteClick(category)
+                showCategoryActionsDialog(category)
                 true
             }
         }

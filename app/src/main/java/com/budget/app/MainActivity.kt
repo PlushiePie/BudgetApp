@@ -3,6 +3,7 @@ package com.budget.app
 import android.app.DatePickerDialog
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputFilter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -20,6 +21,7 @@ import com.github.mikephil.charting.data.PieData
 import com.github.mikephil.charting.data.PieDataSet
 import com.github.mikephil.charting.data.PieEntry
 import com.github.mikephil.charting.formatter.PercentFormatter
+import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -148,8 +150,13 @@ class MainActivity : AppCompatActivity() {
                 categorySpent[transaction.category] = categorySpent.getOrDefault(transaction.category, 0.0) + transaction.amount
             }
 
+            // Если есть большая сумма, применяем логарифмическое масштабирование
+            val maxAmount = categorySpent.values.maxOrNull() ?: 0.0
+            val useLogScale = maxAmount > 50000
+
             val entries = mutableListOf<PieEntry>()
             val colors = mutableListOf<Int>()
+            val originalValues = mutableMapOf<Int, Double>()
 
             val colorPalette = listOf(
                 android.graphics.Color.parseColor("#FF6B6B"),
@@ -167,7 +174,18 @@ class MainActivity : AppCompatActivity() {
                 if (amount > 0) {
                     val category = categories.find { it.name == categoryName }
                     val icon = category?.icon ?: "📌"
-                    entries.add(PieEntry(amount.toFloat(), "$icon $categoryName"))
+                    // ВЕРТИКАЛЬНО через перенос строки
+                    val fullLabel = "$icon\n$categoryName"
+
+                    val displayValue = if (useLogScale && amount > 0) {
+                        val logValue = Math.log10(amount + 1) * 1000
+                        if (logValue < 500f) 500f else logValue
+                    } else {
+                        amount.toFloat()
+                    }
+
+                    entries.add(PieEntry(displayValue.toFloat(), fullLabel))
+                    originalValues[index] = amount
                     colors.add(colorPalette[index % colorPalette.size])
                     index++
                 }
@@ -176,25 +194,49 @@ class MainActivity : AppCompatActivity() {
             if (entries.isNotEmpty()) {
                 val dataSet = PieDataSet(entries, "Траты за этот месяц")
                 dataSet.colors = colors
-                dataSet.valueTextSize = 16f
-                dataSet.valueTypeface = null
                 dataSet.setDrawIcons(false)
                 dataSet.valueTextColor = android.graphics.Color.BLACK
 
+                // Полностью скрываем цены на диаграмме
+                dataSet.valueTextSize = 0f
+                dataSet.setDrawValues(false)
+
+                // Оставляем только названия категорий на диаграмме (вертикально)
+                binding.pieChart.setDrawEntryLabels(true)
+                binding.pieChart.setEntryLabelTextSize(14f)
+                binding.pieChart.setEntryLabelColor(android.graphics.Color.BLACK)
+
                 val pieData = PieData(dataSet)
-                pieData.setValueFormatter(PercentFormatter())
-                pieData.setValueTextSize(16f)
 
                 binding.pieChart.data = pieData
                 binding.pieChart.description.isEnabled = false
                 binding.pieChart.isDrawHoleEnabled = true
                 binding.pieChart.setHoleColor(android.graphics.Color.TRANSPARENT)
-                binding.pieChart.setDrawEntryLabels(true)
-                binding.pieChart.setEntryLabelTextSize(16f)
-                binding.pieChart.setEntryLabelColor(android.graphics.Color.BLACK)
-                // Устанавливаем сумму за текущий месяц в центр диаграммы
+
+                // В центре сумма
                 binding.pieChart.setCenterText("${totalCurrentMonth.toInt()} ₽")
                 binding.pieChart.setCenterTextSize(18f)
+
+                // Добавляем кликабельность на диаграмму
+                binding.pieChart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
+                    override fun onValueSelected(e: com.github.mikephil.charting.data.Entry?, h: com.github.mikephil.charting.highlight.Highlight?) {
+                        if (e != null && e is PieEntry) {
+                            val label = e.label
+                            val index = entries.indexOf(e)
+                            val realValue = originalValues[index] ?: e.value.toDouble()
+
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("📊 Детали категории")
+                                .setMessage("$label\n\n💰 Сумма: ${realValue.toInt()} ₽")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+
+                    override fun onNothingSelected() {
+                    }
+                })
+
                 binding.pieChart.animateY(1000)
                 binding.pieChart.invalidate()
             } else {
@@ -239,6 +281,10 @@ class MainActivity : AppCompatActivity() {
 
         dialogBinding.tvDate.text = dateFormat.format(selectedDate)
 
+        // Лимиты на ввод
+        dialogBinding.etAmount.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
+        dialogBinding.etComment.filters = arrayOf(InputFilter.LengthFilter(12))
+
         dialogBinding.btnSelectDate.setOnClickListener {
             val calendar = Calendar.getInstance()
             calendar.time = selectedDate
@@ -281,19 +327,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun parseAmount(input: String): Double {
         val trimmed = input.trim().lowercase().replace(",", ".")
-        return when {
+        val result = when {
             trimmed.endsWith("к") || trimmed.endsWith("т") -> {
                 val num = trimmed.dropLast(1).toDoubleOrNull()
-                if (num != null) num * 1000 else 0.0
+                num?.times(1000) ?: 0.0
             }
-            else -> trimmed.toDoubleOrNull() ?: 0.0
+            else -> {
+                trimmed.toDoubleOrNull() ?: trimmed.toLongOrNull()?.toDouble() ?: 0.0
+            }
         }
+        // Лимит: 10 000 000 ₽
+        return if (result > 10000000) 0.0 else result
     }
 
     private fun showSetMonthlyBudgetDialog() {
         val input = EditText(this)
         input.hint = "Общий бюджет на месяц"
         input.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        input.filters = arrayOf(InputFilter.LengthFilter(15))
 
         AlertDialog.Builder(this)
             .setTitle("Установить бюджет на месяц")
@@ -386,12 +437,7 @@ class MainActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { setMargins(0, 5, 0, 5) }
             setOnClickListener {
-                lifecycleScope.launch {
-                    budgetManager.deleteTransaction(transaction)
-                    loadData()
-                    Toast.makeText(this@MainActivity, "Трата удалена", Toast.LENGTH_SHORT).show()
-                }
-                dialog.dismiss()
+                showDeleteConfirmationDialog(transaction, dialog)
             }
         }
 
@@ -408,12 +454,7 @@ class MainActivity : AppCompatActivity() {
             isEnabled = !transaction.isCompleted
             if (!transaction.isCompleted) {
                 setOnClickListener {
-                    lifecycleScope.launch {
-                        budgetManager.markTransactionCompleted(transaction)
-                        loadData()
-                        Toast.makeText(this@MainActivity, "Трата отмечена как выполненная", Toast.LENGTH_SHORT).show()
-                    }
-                    dialog.dismiss()
+                    showCompleteConfirmationDialog(transaction, dialog)
                 }
             }
         }
@@ -442,10 +483,42 @@ class MainActivity : AppCompatActivity() {
 
         dialog.show()
 
-        // Увеличиваем размер текста сообщения
+        // Увеличен размер текста сообщения
         val messageView = dialog.findViewById<TextView>(android.R.id.message)
         messageView?.textSize = 18f
         messageView?.gravity = android.view.Gravity.CENTER
+    }
+
+    private fun showDeleteConfirmationDialog(transaction: Transaction, dialog: AlertDialog) {
+        AlertDialog.Builder(this)
+            .setTitle("🗑 Подтверждение удаления")
+            .setMessage("Вы уверены, что хотите удалить эту трату?\n\nКатегория: ${transaction.category}\nСумма: ${transaction.amount.toInt()} ₽\n\nОтменить будет невозможно!")
+            .setPositiveButton("Да, удалить") { _, _ ->
+                lifecycleScope.launch {
+                    budgetManager.deleteTransaction(transaction)
+                    loadData()
+                    Toast.makeText(this@MainActivity, "Трата удалена", Toast.LENGTH_SHORT).show()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun showCompleteConfirmationDialog(transaction: Transaction, dialog: AlertDialog) {
+        AlertDialog.Builder(this)
+            .setTitle("✅ Подтверждение")
+            .setMessage("Вы уверены, что хотите отметить эту трату как выполненную?")
+            .setPositiveButton("Да") { _, _ ->
+                lifecycleScope.launch {
+                    budgetManager.markTransactionCompleted(transaction)
+                    loadData()
+                    Toast.makeText(this@MainActivity, "Трата отмечена как выполненная", Toast.LENGTH_SHORT).show()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
     private fun showSavingsDialog() {
@@ -549,6 +622,7 @@ class MainActivity : AppCompatActivity() {
         val input = EditText(this)
         input.hint = "Сумма пополнения"
         input.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        input.filters = arrayOf(InputFilter.LengthFilter(15))
 
         AlertDialog.Builder(this)
             .setTitle("Пополнить: ${saving.icon} ${saving.name}")
@@ -612,7 +686,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Adapter for Transactions
     inner class TransactionAdapter(
         private val onDeleteClick: (Transaction) -> Unit,
         private val onCompleteClick: (Transaction) -> Unit,
@@ -666,8 +739,26 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("Действия")
                 .setItems(options.toTypedArray()) { _, which ->
                     when (options[which]) {
-                        "Отметить как выполненную" -> onCompleteClick(transaction)
-                        "Удалить" -> onDeleteClick(transaction)
+                        "Отметить как выполненную" -> {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("✅ Подтверждение")
+                                .setMessage("Вы уверены, что хотите отметить эту трату как выполненную?")
+                                .setPositiveButton("Да") { _, _ ->
+                                    onCompleteClick(transaction)
+                                }
+                                .setNegativeButton("Отмена", null)
+                                .show()
+                        }
+                        "Удалить" -> {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("🗑 Подтверждение удаления")
+                                .setMessage("Вы уверены, что хотите удалить эту трату?\n\nКатегория: ${transaction.category}\nСумма: ${transaction.amount.toInt()} ₽\n\nОтменить будет невозможно!")
+                                .setPositiveButton("Да, удалить") { _, _ ->
+                                    onDeleteClick(transaction)
+                                }
+                                .setNegativeButton("Отмена", null)
+                                .show()
+                        }
                     }
                 }
                 .show()

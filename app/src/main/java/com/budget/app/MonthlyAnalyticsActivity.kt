@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -15,6 +16,7 @@ import com.github.mikephil.charting.data.PieData
 import com.github.mikephil.charting.data.PieDataSet
 import com.github.mikephil.charting.data.PieEntry
 import com.github.mikephil.charting.formatter.PercentFormatter
+import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -84,9 +86,8 @@ class MonthlyAnalyticsActivity : AppCompatActivity() {
 
     private fun updateMonthDisplay() {
         val monthYear = monthFormat.format(currentCalendar.time)
-        binding.tvMonthYear.text = monthYear.capitalize()
+        binding.tvMonthYear.text = monthYear.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
-        // Фильтруем траты за выбранный месяц
         val year = currentCalendar.get(Calendar.YEAR)
         val month = currentCalendar.get(Calendar.MONTH)
 
@@ -110,6 +111,7 @@ class MonthlyAnalyticsActivity : AppCompatActivity() {
 
         val entries = mutableListOf<PieEntry>()
         val colors = mutableListOf<Int>()
+        val originalValues = mutableMapOf<Int, Double>()
 
         val colorPalette = listOf(
             android.graphics.Color.parseColor("#FF6B6B"),
@@ -122,10 +124,24 @@ class MonthlyAnalyticsActivity : AppCompatActivity() {
             android.graphics.Color.parseColor("#779ECB")
         )
 
+        // Применяем логарифмическое масштабирование
+        val maxAmount = categoryMap.values.maxOrNull() ?: 0.0
+        val useLogScale = maxAmount > 50000
+
         var index = 0
         for ((category, amount) in categoryMap) {
             if (amount > 0) {
-                entries.add(PieEntry(amount.toFloat(), category))
+                val fullLabel = category
+
+                val displayValue = if (useLogScale && amount > 0) {
+                    val logValue = Math.log10(amount + 1) * 1000
+                    if (logValue < 500f) 500f else logValue
+                } else {
+                    amount.toFloat()
+                }
+
+                entries.add(PieEntry(displayValue.toFloat(), fullLabel))
+                originalValues[index] = amount
                 colors.add(colorPalette[index % colorPalette.size])
                 index++
             }
@@ -137,6 +153,15 @@ class MonthlyAnalyticsActivity : AppCompatActivity() {
             dataSet.valueTextSize = 14f
             dataSet.valueTextColor = android.graphics.Color.BLACK
 
+            // Полностью скрываем цены на диаграмме
+            dataSet.valueTextSize = 0f
+            dataSet.setDrawValues(false)
+
+            // Оставляем только названия категорий
+            binding.pieChartMonth.setDrawEntryLabels(true)
+            binding.pieChartMonth.setEntryLabelTextSize(12f)
+            binding.pieChartMonth.setEntryLabelColor(android.graphics.Color.BLACK)
+
             val pieData = PieData(dataSet)
             pieData.setValueFormatter(PercentFormatter())
 
@@ -144,8 +169,33 @@ class MonthlyAnalyticsActivity : AppCompatActivity() {
             binding.pieChartMonth.description.isEnabled = false
             binding.pieChartMonth.isDrawHoleEnabled = true
             binding.pieChartMonth.setHoleColor(android.graphics.Color.TRANSPARENT)
-            binding.pieChartMonth.setDrawEntryLabels(true)
-            binding.pieChartMonth.setEntryLabelTextSize(12f)
+
+            // В центре сумма
+            val totalSpent = transactions.sumOf { it.amount }
+            binding.pieChartMonth.setCenterText("${totalSpent.toInt()} ₽")
+            binding.pieChartMonth.setCenterTextSize(16f)
+
+            // Добавляем кликабельность на диаграмму
+            binding.pieChartMonth.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
+                override fun onValueSelected(e: com.github.mikephil.charting.data.Entry?, h: com.github.mikephil.charting.highlight.Highlight?) {
+                    if (e != null && e is PieEntry) {
+                        val label = e.label
+                        val index = entries.indexOf(e)
+                        val realValue = originalValues[index] ?: e.value.toDouble()
+
+                        AlertDialog.Builder(this@MonthlyAnalyticsActivity)
+                            .setTitle("📊 Детали категории")
+                            .setMessage("$label\n\n💰 Сумма: ${realValue.toInt()} ₽")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+
+                override fun onNothingSelected() {
+                    // Ничего не делаем
+                }
+            })
+
             binding.pieChartMonth.animateY(1000)
             binding.pieChartMonth.invalidate()
         } else {
@@ -158,17 +208,12 @@ class MonthlyAnalyticsActivity : AppCompatActivity() {
     private fun updateStatistics(transactions: List<Transaction>) {
         val totalSpent = transactions.sumOf { it.amount }
 
-        // Количество дней в месяце
-        val daysInMonth = currentCalendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-
-        // Уникальные дни с тратами
         val daysWithTransactions = transactions.map {
             SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(it.date)
         }.distinct().size
 
         val avgPerDay = if (daysWithTransactions > 0) totalSpent / daysWithTransactions else 0.0
 
-        // Самая затратная категория
         val categoryMap = mutableMapOf<String, Double>()
         for (transaction in transactions) {
             categoryMap[transaction.category] = categoryMap.getOrDefault(transaction.category, 0.0) + transaction.amount

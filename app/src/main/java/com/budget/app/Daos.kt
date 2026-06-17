@@ -38,6 +38,9 @@ interface TransactionDao {
     @Insert
     suspend fun insertTransaction(transaction: Transaction)
 
+    @Update
+    suspend fun updateTransaction(transaction: Transaction)
+
     @Delete
     suspend fun deleteTransaction(transaction: Transaction)
 
@@ -61,6 +64,9 @@ interface SavingDao {
 
     @Delete
     suspend fun deleteSaving(saving: Saving)
+
+    @Update
+    suspend fun updateSaving(saving: Saving)
 
     @Query("UPDATE savings SET currentAmount = currentAmount + :amount WHERE name = :name")
     suspend fun addToSaving(name: String, amount: Double)

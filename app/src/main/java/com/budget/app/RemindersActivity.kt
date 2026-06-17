@@ -2,6 +2,7 @@ package com.budget.app
 
 import android.app.DatePickerDialog
 import android.os.Bundle
+import android.text.InputFilter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -176,14 +177,17 @@ class RemindersActivity : AppCompatActivity() {
     private fun showAddReminderDialog() {
         val inputTitle = EditText(this)
         inputTitle.hint = "Название"
+        inputTitle.filters = arrayOf(InputFilter.LengthFilter(15))
 
         val inputAmount = EditText(this)
         inputAmount.hint = "Сумма (₽)"
         inputAmount.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        inputAmount.filters = arrayOf(InputFilter.LengthFilter(7))
 
         val inputDay = EditText(this)
         inputDay.hint = "Число месяца (1-31)"
         inputDay.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        inputDay.filters = arrayOf(InputFilter.LengthFilter(2))
 
         // Получаем категории для выбора
         val categorySpinner = Spinner(this)
