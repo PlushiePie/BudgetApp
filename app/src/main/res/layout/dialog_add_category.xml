@@ -9,40 +9,39 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Название цели">
+        android:hint="Название категории"
+        app:helperText="Максимум 15 символов">
 
         <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etName"
+            android:id="@+id/etCategoryName"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:maxLength="20" />
+            android:layout_height="wrap_content" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Целевая сумма (₽)"
+        android:hint="Бюджет (₽)"
         app:helperText="Максимум 10 000 000 ₽">
 
         <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etTarget"
+            android:id="@+id/etCategoryBudget"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="numberDecimal"
-            android:maxLength="8" />
+            android:inputType="numberDecimal" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Иконка (эмодзи)">
+        android:hint="Иконка (эмодзи)"
+        app:helperText="Максимум 5 символов">
 
         <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etIcon"
+            android:id="@+id/etCategoryIcon"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:maxLength="5"
-            android:text="💰" />
+            android:text="📌" />
     </com.google.android.material.textfield.TextInputLayout>
 
 </LinearLayout>

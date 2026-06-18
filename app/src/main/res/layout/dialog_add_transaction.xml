@@ -19,7 +19,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Сумма (₽) *"
-        app:helperText="Можно писать: 1500, 1.5к, 2т">
+        app:helperText="Можно писать: 1500, 1.5к, 2т
+                        Максимум 10 000 000 ₽">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etAmount"
@@ -46,6 +47,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Комментарий (опционально)"
+        app:helperText="Максимум 12 символов"
         android:layout_marginTop="12dp">
 
         <com.google.android.material.textfield.TextInputEditText

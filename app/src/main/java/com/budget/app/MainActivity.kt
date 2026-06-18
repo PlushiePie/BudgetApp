@@ -234,6 +234,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     override fun onNothingSelected() {
+                        // Ничего не делаем
                     }
                 })
 
@@ -344,7 +345,7 @@ class MainActivity : AppCompatActivity() {
         val input = EditText(this)
         input.hint = "Общий бюджет на месяц"
         input.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-        input.filters = arrayOf(InputFilter.LengthFilter(15))
+        input.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
 
         AlertDialog.Builder(this)
             .setTitle("Установить бюджет на месяц")
@@ -352,12 +353,14 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Установить") { _, _ ->
                 val newBudget = input.text.toString().toDoubleOrNull()
-                if (newBudget != null && newBudget > 0) {
+                if (newBudget != null && newBudget > 0 && newBudget <= 10000000) {
                     lifecycleScope.launch {
                         budgetManager.setMonthlyBudget(newBudget)
                         loadData()
                         Toast.makeText(this@MainActivity, "Бюджет установлен: ${newBudget.toInt()} ₽", Toast.LENGTH_SHORT).show()
                     }
+                } else if (newBudget != null && newBudget > 10000000) {
+                    Toast.makeText(this, "Бюджет не может превышать 10 000 000 ₽", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, "Введите корректную сумму", Toast.LENGTH_SHORT).show()
                 }
@@ -483,7 +486,7 @@ class MainActivity : AppCompatActivity() {
 
         dialog.show()
 
-        // Увеличен размер текста сообщения
+        // Увеличиваем размер текста сообщения
         val messageView = dialog.findViewById<TextView>(android.R.id.message)
         messageView?.textSize = 18f
         messageView?.gravity = android.view.Gravity.CENTER
@@ -569,6 +572,11 @@ class MainActivity : AppCompatActivity() {
     private fun showAddSavingDialog() {
         val dialogBinding = DialogAddSavingBinding.inflate(layoutInflater)
 
+        // Лимиты на ввод
+        dialogBinding.etName.filters = arrayOf(InputFilter.LengthFilter(20))
+        dialogBinding.etTarget.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
+        dialogBinding.etIcon.filters = arrayOf(InputFilter.LengthFilter(5))
+
         AlertDialog.Builder(this)
             .setTitle("Добавить цель")
             .setView(dialogBinding.root)
@@ -577,7 +585,7 @@ class MainActivity : AppCompatActivity() {
                 val target = dialogBinding.etTarget.text.toString().toDoubleOrNull()
                 val icon = dialogBinding.etIcon.text.toString().ifEmpty { "💰" }
 
-                if (name.isNotEmpty() && target != null && target > 0) {
+                if (name.isNotEmpty() && target != null && target > 0 && target <= 10000000) {
                     lifecycleScope.launch {
                         try {
                             budgetManager.addSaving(name, target, icon)
@@ -587,6 +595,8 @@ class MainActivity : AppCompatActivity() {
                             Toast.makeText(this@MainActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     }
+                } else if (target != null && target > 10000000) {
+                    Toast.makeText(this, "Сумма цели не может превышать 10 000 000 ₽", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, "Заполните все поля корректно", Toast.LENGTH_SHORT).show()
                 }
@@ -622,7 +632,7 @@ class MainActivity : AppCompatActivity() {
         val input = EditText(this)
         input.hint = "Сумма пополнения"
         input.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-        input.filters = arrayOf(InputFilter.LengthFilter(15))
+        input.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
 
         AlertDialog.Builder(this)
             .setTitle("Пополнить: ${saving.icon} ${saving.name}")
@@ -630,7 +640,7 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Пополнить") { _, _ ->
                 val amount = input.text.toString().toDoubleOrNull()
-                if (amount != null && amount > 0) {
+                if (amount != null && amount > 0 && amount <= 10000000) {
                     lifecycleScope.launch {
                         try {
                             budgetManager.addToSaving(saving.name, amount)
@@ -640,6 +650,8 @@ class MainActivity : AppCompatActivity() {
                             Toast.makeText(this@MainActivity, "Ошибка пополнения", Toast.LENGTH_SHORT).show()
                         }
                     }
+                } else if (amount != null && amount > 10000000) {
+                    Toast.makeText(this, "Сумма не может превышать 10 000 000 ₽", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, "Введите корректную сумму", Toast.LENGTH_SHORT).show()
                 }
@@ -686,6 +698,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Adapter for Transactions
     inner class TransactionAdapter(
         private val onDeleteClick: (Transaction) -> Unit,
         private val onCompleteClick: (Transaction) -> Unit,

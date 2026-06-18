@@ -114,12 +114,13 @@ class CategoriesActivity : AppCompatActivity() {
         inputName.filters = arrayOf(InputFilter.LengthFilter(15))
 
         val inputBudget = EditText(this)
-        inputBudget.hint = "Бюджет (₽)"
+        inputBudget.hint = "Бюджет (₽) (макс. 10 000 000)"
         inputBudget.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-        inputBudget.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
+        inputBudget.filters = arrayOf(InputFilter.LengthFilter(8))
 
         val inputIcon = EditText(this)
-        inputIcon.hint = "Иконка (эмодзи)"
+        inputIcon.hint = "Иконка (эмодзи) (макс. 5 символов)"
+        inputIcon.filters = arrayOf(InputFilter.LengthFilter(5))
         inputIcon.setText("📌")
 
         val layout = LinearLayout(this).apply {
@@ -172,14 +173,15 @@ class CategoriesActivity : AppCompatActivity() {
         inputName.filters = arrayOf(InputFilter.LengthFilter(15))
 
         val inputBudget = EditText(this)
-        inputBudget.hint = "Бюджет (₽)"
+        inputBudget.hint = "Бюджет (₽) (макс. 10 000 000)"
         inputBudget.setText(category.budget.toInt().toString())
         inputBudget.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-        inputBudget.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
+        inputBudget.filters = arrayOf(InputFilter.LengthFilter(8))
 
         val inputIcon = EditText(this)
-        inputIcon.hint = "Иконка (эмодзи)"
+        inputIcon.hint = "Иконка (эмодзи) (макс. 5 символов)"
         inputIcon.setText(category.icon)
+        inputIcon.filters = arrayOf(InputFilter.LengthFilter(5))
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -375,10 +377,15 @@ class CategoriesActivity : AppCompatActivity() {
             Сохраняйте все траты в CSV файл.
             
             ⚠️ ЛИМИТЫ:
-            • Максимальная сумма траты: 10 000 000 ₽
+            • Максимальная сумма траты: 
+              10 000 000 ₽
             • Бюджет категории: 10 000 000 ₽
+            • Общий бюджет: 10 000 000 ₽
+            • Сумма цели: 10 000 000 ₽
+            • Пополнение цели: 10 000 000 ₽
             • Комментарий: до 12 символов
             • Название категории: до 15 символов
+            • Название цели: до 20 символов
             
             Приятного использования! 🎉
         """.trimIndent()
