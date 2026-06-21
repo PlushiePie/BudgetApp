@@ -50,12 +50,12 @@ class MainActivity : AppCompatActivity() {
             loadData()
         }
 
-        // Проверяем, нужно ли показать все траты
+        // Проверка, нужно ли показать все траты
         if (intent.getBooleanExtra("show_all_transactions", false)) {
             showAllTransactionsDialog()
         }
 
-        // Проверяем, нужно ли экспортировать CSV
+        // Проверка, нужно ли экспортировать CSV
         if (intent.getBooleanExtra("export_csv", false)) {
             exportToCSV()
         }
@@ -133,7 +133,7 @@ class MainActivity : AppCompatActivity() {
             val currentMonth = calendar.get(Calendar.MONTH)
             val currentYear = calendar.get(Calendar.YEAR)
 
-            // Фильтруем траты только за текущий месяц
+            // Фильтр траты только за текущий месяц
             val currentMonthTransactions = allTransactions.filter { transaction ->
                 val transCalendar = Calendar.getInstance()
                 transCalendar.time = transaction.date
@@ -144,13 +144,11 @@ class MainActivity : AppCompatActivity() {
             // Сумма трат за текущий месяц
             val totalCurrentMonth = currentMonthTransactions.sumOf { it.amount }
 
-            // Группируем по категориям
             val categorySpent = mutableMapOf<String, Double>()
             for (transaction in currentMonthTransactions) {
                 categorySpent[transaction.category] = categorySpent.getOrDefault(transaction.category, 0.0) + transaction.amount
             }
 
-            // Если есть большая сумма, применяем логарифмическое масштабирование
             val maxAmount = categorySpent.values.maxOrNull() ?: 0.0
             val useLogScale = maxAmount > 50000
 
@@ -174,7 +172,6 @@ class MainActivity : AppCompatActivity() {
                 if (amount > 0) {
                     val category = categories.find { it.name == categoryName }
                     val icon = category?.icon ?: "📌"
-                    // ВЕРТИКАЛЬНО через перенос строки
                     val fullLabel = "$icon\n$categoryName"
 
                     val displayValue = if (useLogScale && amount > 0) {
@@ -197,11 +194,9 @@ class MainActivity : AppCompatActivity() {
                 dataSet.setDrawIcons(false)
                 dataSet.valueTextColor = android.graphics.Color.BLACK
 
-                // Полностью скрываем цены на диаграмме
                 dataSet.valueTextSize = 0f
                 dataSet.setDrawValues(false)
 
-                // Оставляем только названия категорий на диаграмме (вертикально)
                 binding.pieChart.setDrawEntryLabels(true)
                 binding.pieChart.setEntryLabelTextSize(14f)
                 binding.pieChart.setEntryLabelColor(android.graphics.Color.BLACK)
@@ -217,7 +212,7 @@ class MainActivity : AppCompatActivity() {
                 binding.pieChart.setCenterText("${totalCurrentMonth.toInt()} ₽")
                 binding.pieChart.setCenterTextSize(18f)
 
-                // Добавляем кликабельность на диаграмму
+                // Добавлено кликабельность на диаграмму
                 binding.pieChart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
                     override fun onValueSelected(e: com.github.mikephil.charting.data.Entry?, h: com.github.mikephil.charting.highlight.Highlight?) {
                         if (e != null && e is PieEntry) {
@@ -255,7 +250,7 @@ class MainActivity : AppCompatActivity() {
         val currentMonth = calendar.get(Calendar.MONTH)
         val currentYear = calendar.get(Calendar.YEAR)
 
-        // Фильтруем траты только за текущий месяц
+        // Фильтр траты только за текущий месяц
         val currentMonthTransactions = allTransactions.filter { transaction ->
             val transCalendar = Calendar.getInstance()
             transCalendar.time = transaction.date
@@ -272,6 +267,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAddTransactionDialog() {
+        // Проверка, есть ли категории
+        if (currentCategories.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("⚠️ Нет категорий")
+                .setMessage("Сначала создайте хотя бы одну категорию в разделе 'Категории бюджета'")
+                .setPositiveButton("Перейти в категории") { _, _ ->
+                    val intent = Intent(this, CategoriesActivity::class.java)
+                    startActivity(intent)
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
+            return
+        }
+
         val dialogBinding = DialogAddTransactionBinding.inflate(layoutInflater)
         var selectedDate = Date()
 
@@ -283,7 +292,7 @@ class MainActivity : AppCompatActivity() {
         dialogBinding.tvDate.text = dateFormat.format(selectedDate)
 
         // Лимиты на ввод
-        dialogBinding.etAmount.filters = arrayOf(InputFilter.LengthFilter(8))  // 8 цифр = до 99 999 999
+        dialogBinding.etAmount.filters = arrayOf(InputFilter.LengthFilter(8))
         dialogBinding.etComment.filters = arrayOf(InputFilter.LengthFilter(12))
 
         dialogBinding.btnSelectDate.setOnClickListener {
@@ -307,6 +316,12 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Добавить трату")
             .setView(dialogBinding.root)
             .setPositiveButton("Сохранить") { _, _ ->
+                // Проверяем, что категория выбрана
+                if (dialogBinding.spinnerCategory.selectedItem == null || dialogBinding.spinnerCategory.selectedItem.toString().isEmpty()) {
+                    Toast.makeText(this, "Выберите категорию", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
                 val amountText = dialogBinding.etAmount.text.toString()
                 val amount = parseAmount(amountText)
                 val category = dialogBinding.spinnerCategory.selectedItem.toString()
@@ -413,13 +428,11 @@ class MainActivity : AppCompatActivity() {
             
         """.trimIndent()
 
-        // Создаем диалог
         val dialog = AlertDialog.Builder(this)
             .setTitle("📋 ДЕТАЛИ ТРАТЫ")
             .setMessage(message)
             .create()
 
-        // Создаем кастомный layout для кнопок после создания диалога
         val buttonLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(
@@ -481,12 +494,10 @@ class MainActivity : AppCompatActivity() {
         buttonLayout.addView(completeButton)
         buttonLayout.addView(closeButton)
 
-        // Добавляем кнопки в диалог
         dialog.setView(buttonLayout)
 
         dialog.show()
 
-        // Увеличиваем размер текста сообщения
         val messageView = dialog.findViewById<TextView>(android.R.id.message)
         messageView?.textSize = 18f
         messageView?.gravity = android.view.Gravity.CENTER
